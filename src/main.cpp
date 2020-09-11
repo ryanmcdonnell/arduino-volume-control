@@ -1,57 +1,93 @@
 #include <Arduino.h>
 #include <SPI.h>
 
-const byte address = 0x00;
 const int encoderA = PIN2;
 const int encoderB = PIN4;
 const int encoderSwitch = PIN3;
-const int leftPad = PIN5;
-const int rightPad = PIN6;
+const int CS = 10;
+
+byte leftPadAddress = B00000000;
+byte rightPadAddress = B00010000;
 
 const int volumeUpOhms = 1000; // 1k
 const int volumeDownOhms = 3200; // 3.2k
 const int potMaxSteps = 128;
-const int potMaxOhms = 10000; // 10k
+const long potMaxOhms = 100000L; // 100k
 
-const int volUpStepValue = (volumeUpOhms / potMaxOhms) * potMaxSteps;
-const int volDownStepValue = (volumeDownOhms / potMaxOhms) * potMaxSteps;
-const int muteStepValue = 0;
+enum SteeringWheelButton {
+  None,
+  VolumeUp,
+  VolumeDown,
+  Mute
+};
 
-void digitalPotWrite(int padCS, int value)
+SteeringWheelButton buttonToBePressed;
+
+void setPot(byte address, int step)
 {
-  digitalWrite(padCS, LOW);
-  
-  // Button pressed
+  digitalWrite(CS, LOW);
+
   SPI.transfer(address);
-  SPI.transfer(value);
+  SPI.transfer(step);
+
+  digitalWrite(CS, HIGH);
+}
+
+void pressButton(SteeringWheelButton button)
+{
+  byte address;
+  int r;
+
+  switch(button) {
+    case VolumeUp:
+      address = leftPadAddress;
+      r = 1000; // 1k ohms
+      break;
+    case VolumeDown:
+      address = leftPadAddress;
+      r = 3200; // 3.2k ohms
+      break;
+    case Mute:
+      address = rightPadAddress;
+      r = 0; // 0 ohm
+      break;
+    case None:
+      return;
+  }
+
+  float value = (((float)r / potMaxOhms) * potMaxSteps);
+  int step = floor(value);
+
+  // Button pressed
+  setPot(address, step);
   
-  delay(100);
+  delay(70);
   
   // Button released
-  //SPI.transfer(address);
-  //SPI.transfer(potMaxSteps);
-
-  digitalWrite(padCS, HIGH);
+  setPot(address, potMaxSteps);
 }
 
 void encoderTurned() {
+  if(buttonToBePressed != None) return;
+
   int valA = digitalRead(encoderA);
   int valB = digitalRead(encoderB);
-  int r = 0;
   
   // Compare pins to determine in which direction encoder was turned
   if (valA != valB) {
       // Clockwise
-      digitalPotWrite(leftPad, volUpStepValue);
+      buttonToBePressed = VolumeUp;
   }
   else {
       // Counter-clockwise
-      digitalPotWrite(leftPad, volDownStepValue);
+      buttonToBePressed = VolumeDown;
   }
 }
 
 void encoderSwitchPushed() {
-  digitalPotWrite(rightPad, muteStepValue);
+  if(buttonToBePressed != None) return;
+
+  buttonToBePressed = Mute;
 }
 
 void setup() {
@@ -59,27 +95,24 @@ void setup() {
   pinMode(encoderB, INPUT);
   pinMode(encoderSwitch, INPUT);
 
-  pinMode(leftPad, OUTPUT);
-  pinMode(rightPad, OUTPUT);
-
+  pinMode(CS, OUTPUT);
   SPI.begin();
+
+  // Set steady state
+  setPot(leftPadAddress, potMaxSteps);
+  setPot(rightPadAddress, potMaxSteps);
 
   attachInterrupt(digitalPinToInterrupt(encoderA), encoderTurned, RISING); // Only trigger in high position
   attachInterrupt(digitalPinToInterrupt(encoderSwitch), encoderSwitchPushed, RISING);
 }
 
 void loop() {
-  for (int i = 50; i <= 128; i++)
-  {
-    digitalPotWrite(leftPad, i);
-    digitalPotWrite(rightPad, i);
-    delay(10);
+  if(buttonToBePressed != None) {
+    
+    pressButton(buttonToBePressed);
+
+    buttonToBePressed = None;
   }
 
-  for (int i = 128; i >= 50; i--)
-  {
-    digitalPotWrite(leftPad, i);
-    digitalPotWrite(rightPad, i);
-    delay(10);
-  } 
+  delay(10);
 }
