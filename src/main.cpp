@@ -9,8 +9,6 @@ const int CS = 10;
 byte leftPadAddress = B00000000;
 byte rightPadAddress = B00010000;
 
-const int volumeUpOhms = 1000; // 1k
-const int volumeDownOhms = 3200; // 3.2k
 const int potMaxSteps = 128;
 const long potMaxOhms = 100000L; // 100k
 
@@ -49,7 +47,7 @@ void pressButton(SteeringWheelButton button)
       break;
     case Mute:
       address = rightPadAddress;
-      r = 0; // 0 ohm
+      r = 3200; // 3.2k ohm
       break;
     case None:
       return;
